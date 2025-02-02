@@ -6,11 +6,11 @@ import (
 	"fmt"
 	hellopb "grpc-practice/pkg/grpc/api"
 	"io"
+	"log"
 	"time"
 
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type myServer struct {
@@ -26,18 +26,33 @@ func (s *myServer) Hello(ctx context.Context, req *hellopb.HelloRequest) (*hello
 	// リクエストからnameフィールドを取り出して
 	// "Hello, [名前]!"というレスポンスを返す
 
-	stat := status.New(codes.Unknown, "unknown error")
-	stat, _ = stat.WithDetails(&errdetails.DebugInfo{
-		Detail: "debug info for error",
-	})
+	// stat := status.New(codes.Unknown, "unknown error")
+	// stat, _ = stat.WithDetails(&errdetails.DebugInfo{
+	// 	Detail: "debug info for error",
+	// })
 
-	err := stat.Err()
+	// err := stat.Err()
 
-	// return &hellopb.HelloResponse{
-	// 	Message: fmt.Sprintf("Hello, %s!", req.GetName()),
-	// }, nil
+	headerMD := metadata.New(map[string]string{"type": "unary", "from": "server", "in": "header"})
 
-	return &hellopb.HelloResponse{}, err
+	if err := grpc.SetHeader(ctx, headerMD); err != nil {
+		return nil, err
+	}
+
+	trailerMD := metadata.New(map[string]string{"type": "unary", "from": "server", "in": "trailer"})
+	if err := grpc.SetTrailer(ctx, trailerMD); err != nil {
+		return nil, err
+	}
+
+	// if md, ok := metadata.FromIncomingContext(ctx); ok {
+	// 	fmt.Println("metadata: ", md)
+	// }
+
+	return &hellopb.HelloResponse{
+		Message: fmt.Sprintf("Hello, %s!", req.GetName()),
+	}, nil
+
+	// return &hellopb.HelloResponse{}, err
 }
 
 // ストリーム処理
@@ -80,6 +95,9 @@ func (s *myServer) HelloClientStream(stream hellopb.GreetingService_HelloClientS
 }
 
 func (s *myServer) HelloBiStreams(stream hellopb.GreetingService_HelloBiStreamsServer) error {
+	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
+		log.Println(md)
+	}
 	for {
 		// 1. リクエスト受信
 		req, err := stream.Recv()

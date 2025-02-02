@@ -10,7 +10,10 @@ import (
 	"grpc-practice/cmd/handler"
 	hellopb "grpc-practice/pkg/grpc/api"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -24,13 +27,20 @@ func Server() {
 	}
 
 	//grpc serverを作成
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(myUnaryServerInterceptor1),
+		grpc.StreamInterceptor(myStreamServerInterceptor1),
+	)
 
 	helloHandler := handler.NewHandler()
 
 	//grpcにサーバーを登録
 	hellopb.RegisterGreetingServiceServer(s, helloHandler)
 
+	//ヘルスチェック
+	healthSrv := health.NewServer()
+	healthpb.RegisterHealthServer(s, healthSrv)
+	healthSrv.SetServingStatus("mygrpc", healthpb.HealthCheckResponse_SERVING)
 	reflection.Register(s)
 
 	go func() {

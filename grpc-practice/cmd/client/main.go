@@ -10,6 +10,7 @@ import (
 
 	"os"
 
+	"grpc-practice/cmd/client/interceptor"
 	hellopb "grpc-practice/pkg/grpc/api"
 
 	//Detailsメソッドにて取得したメッセージ型をデシリアライズして中身を見るために、
@@ -17,6 +18,7 @@ import (
 	_ "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -32,7 +34,7 @@ func main() {
 
 	address := "localhost:8080"
 
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(interceptor.MyUnaryClientInteceptor1), grpc.WithStreamInterceptor(interceptor.MyStreamClientInteceptor1))
 
 	if err != nil {
 		log.Fatal("connection error: ", err)
@@ -78,13 +80,19 @@ M:
 
 func Hello() {
 	fmt.Println("Please enter your name.")
+	var header, trailer metadata.MD
 	scanner.Scan()
 	name := scanner.Text()
 
 	req := &hellopb.HelloRequest{
 		Name: name,
 	}
-	res, err := client.Hello(context.Background(), req)
+
+	ctx := context.Background()
+	md := metadata.New(map[string]string{"type": "unary", "from": "client"})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	res, err := client.Hello(ctx, req, grpc.Header(&header), grpc.Trailer(&trailer))
 	if err != nil {
 		fmt.Println(err)
 		if status, ok := status.FromError(err); ok {
@@ -95,6 +103,8 @@ func Hello() {
 			fmt.Println(err)
 		}
 	} else {
+		fmt.Println(header)
+		fmt.Println(trailer.Get("type"))
 		fmt.Println(res.GetMessage())
 	}
 }
@@ -164,7 +174,10 @@ func HelloClientStream() {
 }
 
 func HelloBiStreams() {
-	stream, err := client.HelloBiStreams(context.Background())
+	ctx := context.Background()
+	md := metadata.New(map[string]string{"type": "stream", "from": "client"})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+	stream, err := client.HelloBiStreams(ctx)
 	if err != nil {
 		fmt.Println(err)
 		return
